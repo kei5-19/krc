@@ -1,3 +1,6 @@
+use std::{env, process};
+
 fn main() {
-    println!("Hello, world!");
+    let code = linker::main(env::args().into_iter().collect());
+    process::exit(code);
 }
