@@ -1,6 +1,10 @@
-[package]
-name = "krc"
+[workspace]
+resolver = "2"
+members = ["linker"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
-
-[dependencies]
+authors = ["kei519 <masaki.keigo.q00@kyoto-u.jp>"]
+description = "Front-end Rust Compiler for studying."
+readme = "README.md"
