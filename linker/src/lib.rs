@@ -7,6 +7,7 @@ pub fn main(_args: Vec<String>) -> i32 {
     let filename = "a.out";
     let file = match OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .mode(0o777)
         .open(filename)
