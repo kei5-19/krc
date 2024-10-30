@@ -3,6 +3,8 @@ use std::{
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
 };
 
+pub mod elf;
+
 pub fn main(_args: Vec<String>) -> i32 {
     let filename = "a.out";
     let file = match OpenOptions::new()
