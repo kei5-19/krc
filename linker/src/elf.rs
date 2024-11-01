@@ -4,6 +4,13 @@
 //! https://refspecs.linuxfoundation.org/elf/elf.pdf
 //! [ELF-64 Object File Format]: https://uclibc.org/docs/elf-64-gen.pdf
 
+use bitflags::bitflags;
+
+/// SHN_UNDEF
+///
+/// Represents undefined section.
+pub const SECTION_HEADER_NUMBER_UNDEF: u16 = 0;
+
 #[derive(Debug, Default, Clone)]
 pub struct Elf64Header {
     /// Marks the file as an object file and provides machine-independent data with which to decode
@@ -54,8 +61,8 @@ pub struct Elf64Header {
     pub shnum: u16,
 
     /// Holds the section header table index of the entry associated with the section name string
-    /// table. If the file has no section name string table, holds the value SHN_UNDEF.
-    // TODO: Do not use SHN_UNDEF here.
+    /// table. If the file has no section name string table, holds the value
+    /// [SECTION_HEADER_NUMBER_UNDEF].
     pub shstrndx: u16,
 }
 
@@ -266,4 +273,180 @@ pub enum Machine {
     ///
     /// MIPS RS3000
     Mips = 8,
+}
+
+pub struct Elf64SectionHeader {
+    /// Specifies the name of the section. Its value is an index into the section header string
+    /// table section, giving the location of a null-terminated string.
+    pub name: u32,
+
+    /// Categorizes the section's contents and segmantics.
+    pub ty: SectionType,
+
+    /// Specifies 1-bit flags that describe miscellaneous attributes.
+    pub flags: SectionFlag64,
+
+    /// Gives the address at which the section's first byte should reside, if the section will
+    /// apperar in the memory image of a process.
+    pub addr: u64,
+
+    /// Gives the byte offset from the beginning of the file to the first byte in the section.
+    pub offset: u64,
+
+    /// Gives the section's size in bytes.
+    pub size: u64,
+
+    /// Holds a section header table index link, whose interpretation depends on the section type.
+    ///
+    /// | Section | Interpretation |
+    /// | :------ | :------------- |
+    /// | [Dynamic][SectionType::Dynamic] | The section header index of the string table used by entries in the section. |
+    /// | [Hash][SectionType::Hash] | The section header index of the symbol table to which the hash table applies. |
+    /// | [Rel][SectionType::Rel] & [Rela][SectionType::Rela] | The section header index of the associated symbol table. |
+    /// | [Symtab][SectionType::Symtab] & [Dynsym][SectionType::Dynsym] | This information is operating system specific. |
+    /// | other | [SECTION_HEADER_NUMBER_UNDEF] |
+    pub link: u32,
+
+    /// Holds exrtra information, whose interpretation depends on the section type.
+    ///
+    /// | Section | Interpretation |
+    /// | :------ | :------------- |
+    /// | [Rel][SectionType::Rel] & [Rela][SectionType::Rela] | The section header index of the section to which the relocation applies. |
+    /// | [Symtab][SectionType::Symtab] & [Dynsym][SectionType::Dynsym] | This information is operating system specific. |
+    /// | other | 0 |
+    pub info: u32,
+
+    /// Gives the address alignment constraints. Only 0 and positive integral powers of two are
+    /// allowed. Values 0 and 1 mean the section has no alignment constraints.
+    pub addralign: u64,
+
+    /// Gives the size in bytes of each entry, if the section holds a table of fixed-size entries.
+    /// Value 0 means the section does not hold a table of fixed-size entries.
+    pub entsize: u64,
+}
+
+#[repr(u32)]
+pub enum SectionType {
+    ///
+    /// Marks the section header as inactive; it does not have an associated section. Other members
+    /// of the section header have undefined values.
+    Null = 0,
+
+    /// SHT_PROGBITS
+    ///
+    /// The section holds information defined by the program, whose format and meaning are
+    /// determined solely by the program.
+    Progbits = 1,
+
+    /// SHT_SYMTAB
+    ///
+    /// The section holds a symbol table.
+    Symtab = 2,
+
+    /// SHT_STRTAB
+    ///
+    /// The section holds a string table.
+    Strtab = 3,
+
+    /// SHT_RELA
+    ///
+    /// The section holds relocation entries with explicit addends, such as type `Elf32_Rela` for
+    /// the 32-bit class of object files.
+    Rela = 4,
+
+    /// SHT_HASH
+    ///
+    /// The section holds a symbol hash table.
+    Hash = 5,
+
+    /// SHT_DYNAMIC
+    ///
+    /// The section holds information for dynamic linking.
+    Dynamic = 6,
+
+    /// SHT_NOTE
+    ///
+    /// The section holds information that marks the file in some way.
+    Note = 7,
+
+    /// SHT_NOBITS
+    ///
+    /// A section of this type ocuupies no space in the file but otherwise resembles
+    /// `SHT_PROGBITS`. Although this section contains no bytes, the sh_offset member contains the
+    /// conceptual file offset.
+    Nobits = 8,
+
+    /// SHT_REL
+    ///
+    /// The section holds relocation entries without explicit addends, such as type `Elf32_Rel` for
+    /// the 32-bit class of object files. An object file may have multiple relocation sections.
+    Rel = 9,
+
+    /// SHT_SHLIB
+    ///
+    /// This section type is reserved but has unspecified semantics.
+    Shlib = 10,
+
+    /// SHT_DYNSYM
+    ///
+    /// Holds a symbol table.
+    Dynsym = 11,
+}
+
+bitflags! {
+    pub struct SectionFlag64: u64 {
+        /// SHF_WRITE
+        ///
+        /// The section contains data that should be writable during process exectuion.
+        const WRITE = 0x1;
+
+        /// SHF_ALLOC
+        ///
+        /// The section occupies memory during process execution. Some control sections do not
+        /// reside in the memory image of an object file; this attribute is off for those sections.
+        const ALLOC = 0x2;
+
+        /// SHF_EXECINSTR
+        ///
+        /// The section contains executable machine instructions.
+        const EXECINSTR = 0x4;
+
+        // Makes these bits known. They are reserved for processor-specific semantics.
+        const _ = 0xF000_0000;
+
+        // Makes these bits known. They are reserved for environment-specific semantics.
+        const _ = 0x0F00_0000;
+    }
+}
+
+pub struct Elf64ProgramHeader {
+    pub ty: SegmentType,
+    pub flags: SegmentFlag,
+    pub offset: u64,
+    pub vaddr: u64,
+    pub paddr: u64,
+    pub filesz: u64,
+    pub memsz: u64,
+    pub align: u64,
+}
+
+#[repr(u32)]
+pub enum SegmentType {
+    Null = 0,
+    Load = 1,
+    Dynamic = 2,
+    Interp = 3,
+    Note = 4,
+    Shlib = 5,
+    Phdr = 6,
+}
+
+bitflags! {
+    pub struct SegmentFlag: u32 {
+        const X = 0x1;
+        const W = 0x2;
+        const R = 0x4;
+
+        const _ = 0xF000_0000;
+    }
 }
