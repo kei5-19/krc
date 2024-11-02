@@ -1,6 +1,12 @@
 use std::{fmt::Debug, io::Read, mem};
 
-use crate::elf::{Elf64Header, ElfClass, ElfIdent, Encoding, OsAbi};
+use crate::{
+    elf::{
+        Elf64Header, Elf64SectionHeader, ElfClass, ElfIdent, Encoding, OsAbi, SectionFlag64,
+        SectionType,
+    },
+    util::FromBytes as _,
+};
 
 #[cfg(test)]
 mod tests;
@@ -15,9 +21,17 @@ pub struct ObjectFile {
 
 impl Debug for ObjectFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ObjectFile")
-            .field("header", &self.header)
-            .finish_non_exhaustive()
+        let section_headers: Result<Vec<_>, _> = self.section_headers().collect();
+
+        let mut debug = f.debug_struct("ObjectFile");
+        debug.field("header", &self.header);
+
+        match section_headers {
+            Ok(headers) => debug.field("section_headers", &headers),
+            Err(e) => debug.field("section_headers", &format!("Err({})", e)),
+        };
+
+        debug.finish_non_exhaustive()
     }
 }
 
@@ -58,5 +72,63 @@ impl ObjectFile {
         }
 
         Ok(ObjectFile { header, data })
+    }
+
+    pub fn section_headers(&self) -> SectionHeaderIter {
+        SectionHeaderIter {
+            head: &self.data[self.header.shoff as usize - mem::size_of_val(&self.header)..],
+            len: self.header.shnum,
+            pos: 0,
+        }
+    }
+}
+
+pub struct SectionHeaderIter<'a> {
+    head: &'a [u8],
+    len: u16,
+    pos: usize,
+}
+
+impl<'a> Iterator for SectionHeaderIter<'a> {
+    type Item = Result<Elf64SectionHeader, String>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let size = mem::size_of::<Elf64SectionHeader>();
+
+        if self.pos >= size * self.len as usize {
+            return None;
+        }
+
+        if self.head[self.pos..].len() < size {
+            return Some(Err("the size of a section header is invalid".into()));
+        }
+
+        let mut header = &self.head[self.pos..self.pos + size];
+        let name = u32::read_le_bytes(&mut header);
+
+        let ty = match SectionType::try_from(u32::read_le_bytes(&mut header)) {
+            Ok(t) => t,
+            Err(e) => return Some(Err(e)),
+        };
+
+        let flags = u64::read_le_bytes(&mut header);
+        let Some(flags) = SectionFlag64::from_bits(flags) else {
+            return Some(Err(format!("a section has invalid flags: 0x{:x}", flags)));
+        };
+
+        self.pos += size;
+
+        Some(Ok(Elf64SectionHeader {
+            name,
+            ty,
+            flags,
+            addr: u64::read_le_bytes(&mut header),
+            offset: u64::read_le_bytes(&mut header),
+            size: u64::read_le_bytes(&mut header),
+            link: u32::read_le_bytes(&mut header),
+            info: u32::read_le_bytes(&mut header),
+            addralign: u64::read_le_bytes(&mut header),
+            entsize: u64::read_le_bytes(&mut header),
+        }))
     }
 }
