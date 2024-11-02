@@ -5,6 +5,7 @@ use std::{
 
 pub mod elf;
 pub mod inputs;
+pub mod util;
 
 pub fn main(_args: Vec<String>) -> i32 {
     let filename = "a.out";
