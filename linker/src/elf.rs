@@ -112,6 +112,7 @@ impl Elf64Header {
 /// Specifies how to intepret the file, independent of the
 /// processor on which the inquiry is made and independent of the file's remaining contents, to
 /// support multiple processors, multiple data encodings and multiple classes of machines.
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct ElfIdent {
     /// EI_MAG0 to EI_MAG3
@@ -159,6 +160,21 @@ impl ElfIdent {
             abi_version: 0,
             pad: [0; 7],
         }
+    }
+
+    pub fn from_bytes(bytes: [u8; mem::size_of::<Self>()]) -> Result<Self, String> {
+        if &bytes[..mem::offset_of!(Self, class)] != b"\x7FELF" {
+            return Err("magic is not for ELF".into());
+        }
+        ElfClass::try_from(bytes[mem::offset_of!(Self, class)])?;
+        Encoding::try_from(bytes[mem::offset_of!(Self, data)])?;
+        match ElfVersion::try_from(bytes[mem::offset_of!(Self, version)])? {
+            ElfVersion::Current => {}
+            _ => return Err("invaild ELF version".into()),
+        }
+        OsAbi::try_from(bytes[mem::offset_of!(Self, osabi)])?;
+
+        Ok(unsafe { mem::transmute::<[u8; mem::size_of::<Self>()], Self>(bytes) })
     }
 }
 
