@@ -356,6 +356,11 @@ impl_enum_try_from! {
         ///
         /// MIPS RS3000
         Mips = 8,
+
+        /// EM_X86_64
+        ///
+        /// AMD x86-64
+        X86_64 = 62,
     },
     u16,
     String,
