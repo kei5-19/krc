@@ -9,6 +9,8 @@ use std::mem;
 use bitflags::bitflags;
 use enum_try_from::impl_enum_try_from;
 
+use crate::util::FromBytes as _;
+
 /// SHN_UNDEF
 ///
 /// Represents undefined section.
@@ -74,10 +76,12 @@ impl Elf64Header {
         ident: ElfIdent,
         left: [u8; mem::size_of::<Self>() - mem::size_of::<ElfIdent>()],
     ) -> Result<Self, String> {
-        let ty = ObjectFileType::try_from(u16::from_le_bytes([left[0], left[1]]))?;
-        let machine = Machine::try_from(u16::from_le_bytes([left[2], left[3]]))?;
+        let mut left = &left[..];
 
-        let version = u32::from_le_bytes([left[4], left[5], left[6], left[7]]);
+        let ty = ObjectFileType::try_from(u16::read_le_bytes(&mut left))?;
+        let machine = Machine::try_from(u16::read_le_bytes(&mut left))?;
+
+        let version = u32::read_le_bytes(&mut left);
         if version != ElfVersion::Current as _ {
             return Err("invalid ELF version".into());
         }
@@ -87,22 +91,16 @@ impl Elf64Header {
             ty,
             machine,
             version,
-            entry: u64::from_le_bytes([
-                left[8], left[9], left[10], left[11], left[12], left[13], left[14], left[15],
-            ]),
-            phoff: u64::from_le_bytes([
-                left[16], left[17], left[18], left[19], left[20], left[21], left[22], left[23],
-            ]),
-            shoff: u64::from_le_bytes([
-                left[24], left[25], left[26], left[27], left[28], left[29], left[30], left[31],
-            ]),
-            flags: u32::from_le_bytes([left[32], left[33], left[34], left[35]]),
-            ehsize: u16::from_le_bytes([left[36], left[37]]),
-            phentsize: u16::from_le_bytes([left[38], left[39]]),
-            phnum: u16::from_le_bytes([left[40], left[41]]),
-            shentsize: u16::from_le_bytes([left[42], left[43]]),
-            shnum: u16::from_le_bytes([left[44], left[45]]),
-            shstrndx: u16::from_le_bytes([left[46], left[47]]),
+            entry: u64::read_le_bytes(&mut left),
+            phoff: u64::read_le_bytes(&mut left),
+            shoff: u64::read_le_bytes(&mut left),
+            flags: u32::read_le_bytes(&mut left),
+            ehsize: u16::read_le_bytes(&mut left),
+            phentsize: u16::read_le_bytes(&mut left),
+            phnum: u16::read_le_bytes(&mut left),
+            shentsize: u16::read_le_bytes(&mut left),
+            shnum: u16::read_le_bytes(&mut left),
+            shstrndx: u16::read_le_bytes(&mut left),
         })
     }
 }
@@ -367,6 +365,7 @@ impl_enum_try_from! {
     "invalid machine".into()
 }
 
+#[derive(Debug, Clone)]
 pub struct Elf64SectionHeader {
     /// Specifies the name of the section. Its value is an index into the section header string
     /// table section, giving the location of a null-terminated string.
@@ -419,6 +418,7 @@ pub struct Elf64SectionHeader {
 
 impl_enum_try_from! {
     #[repr(u32)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum SectionType {
         ///
         /// Marks the section header as inactive; it does not have an associated section. Other members
@@ -484,6 +484,76 @@ impl_enum_try_from! {
         ///
         /// Holds a symbol table.
         Dynsym = 11,
+
+        /// SHT_INIT_ARRAY
+        ///
+        /// Array of constructors.
+        InitArray = 14,
+
+        /// SHT_FINI_ARRAY
+        ///
+        /// Array of destructors.
+        FiniArray = 15,
+
+        /// SHT_PREINIT_ARRAY
+        ///
+        /// Array of pre-constructors.
+        PreinitArray = 16,
+
+        /// SHT_GROUP
+        ///
+        /// Section group.
+        Group = 17,
+
+        /// SHT_SYMTAB_SHNDX
+        ///
+        /// Extended section indices.
+        SymtabShndx = 18,
+
+        /// SHT_NUM
+        ///
+        /// Number of defined types.
+        Num = 19,
+
+        /// SHT_LOOS
+        ///
+        /// Start OS-specific.
+        Loos = 0x6000_0000,
+
+        /// SHT_GNU_ATTRIBUTES
+        ///
+        /// Object attributes.
+        GnuAttributes = 0x6FFF_FFF5,
+
+        /// SHT_GNU_HASH
+        ///
+        /// Gnu-style hash table.
+        GnuHash = 0x6FFF_FFF6,
+
+        /// SHT_GNU_LIBLIST
+        ///
+        /// Prelink library list.
+        GnuLiblist = 0x6FFF_FFF7,
+
+        /// SHT_CHECKSUM
+        ///
+        /// Checsum for DSO content.
+        CheckSum = 0x6FFF_FFF8,
+
+        /// SHT_GNU_verdef
+        ///
+        /// Version definition section.
+        GnuVerdef = 0x6FFF_FFFD,
+
+        /// SHT_GNU_verneed
+        ///
+        /// Vresion needs section.
+        GnuVerneed = 0x6FFF_FFFE,
+
+        /// SHT_GNU_VERSYM
+        ///
+        /// Version symbol table.
+        GnuVersym = 0x6FFF_FFFF,
     },
     u32,
     String,
@@ -491,6 +561,7 @@ impl_enum_try_from! {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy)]
     pub struct SectionFlag64: u64 {
         /// SHF_WRITE
         ///
@@ -507,6 +578,46 @@ bitflags! {
         ///
         /// The section contains executable machine instructions.
         const EXECINSTR = 0x4;
+
+        /// SHF_MERGE
+        ///
+        /// Might be merged.
+        const MERGE = 1 << 4;
+
+        /// SHF_STRINGS
+        ///
+        /// Contains nul-terminated strings.
+        const STRINGS = 1 << 5;
+
+        /// SHF_INFO_LINK
+        ///
+        /// `sh_info` contains SHT index.
+        const INFO_LINK = 1 << 6;
+
+        /// SHF_LINK_ORDER
+        ///
+        /// Preserve order after combining.
+        const LINK_ORDER = 1 << 7;
+
+        /// SHF_OS_NONCONFORMING
+        ///
+        /// Non-standard OS specific handling required.
+        const OS_NONCONFORMING = 1 << 8;
+
+        /// SHF_GROUP
+        ///
+        /// Section is member of a group.
+        const GROUP = 1 << 9;
+
+        /// SHF_TLS
+        ///
+        /// Section hold thread-local data.
+        const TLS = 1 << 10;
+
+        /// SHF_COMPRESSED
+        ///
+        /// Section with compressed data.
+        const COMPRESSED = 1 << 11;
 
         // Makes these bits known. They are reserved for processor-specific semantics.
         const _ = 0xF000_0000;
