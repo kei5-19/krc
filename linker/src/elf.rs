@@ -4,7 +4,10 @@
 //! https://refspecs.linuxfoundation.org/elf/elf.pdf
 //! [ELF-64 Object File Format]: https://uclibc.org/docs/elf-64-gen.pdf
 
+use std::mem;
+
 use bitflags::bitflags;
+use enum_try_from::impl_enum_try_from;
 
 /// SHN_UNDEF
 ///
@@ -64,6 +67,44 @@ pub struct Elf64Header {
     /// table. If the file has no section name string table, holds the value
     /// [SECTION_HEADER_NUMBER_UNDEF].
     pub shstrndx: u16,
+}
+
+impl Elf64Header {
+    pub fn from_bytes(
+        ident: ElfIdent,
+        left: [u8; mem::size_of::<Self>() - mem::size_of::<ElfIdent>()],
+    ) -> Result<Self, String> {
+        let ty = ObjectFileType::try_from(u16::from_le_bytes([left[0], left[1]]))?;
+        let machine = Machine::try_from(u16::from_le_bytes([left[2], left[3]]))?;
+
+        let version = u32::from_le_bytes([left[4], left[5], left[6], left[7]]);
+        if version != ElfVersion::Current as _ {
+            return Err("invalid ELF version".into());
+        }
+
+        Ok(Self {
+            ident,
+            ty,
+            machine,
+            version,
+            entry: u64::from_le_bytes([
+                left[8], left[9], left[10], left[11], left[12], left[13], left[14], left[15],
+            ]),
+            phoff: u64::from_le_bytes([
+                left[16], left[17], left[18], left[19], left[20], left[21], left[22], left[23],
+            ]),
+            shoff: u64::from_le_bytes([
+                left[24], left[25], left[26], left[27], left[28], left[29], left[30], left[31],
+            ]),
+            flags: u32::from_le_bytes([left[32], left[33], left[34], left[35]]),
+            ehsize: u16::from_le_bytes([left[36], left[37]]),
+            phentsize: u16::from_le_bytes([left[38], left[39]]),
+            phnum: u16::from_le_bytes([left[40], left[41]]),
+            shentsize: u16::from_le_bytes([left[42], left[43]]),
+            shnum: u16::from_le_bytes([left[44], left[45]]),
+            shstrndx: u16::from_le_bytes([left[46], left[47]]),
+        })
+    }
 }
 
 /// The initial bytes of the ELF file.
@@ -127,152 +168,182 @@ impl Default for ElfIdent {
     }
 }
 
-#[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ElfClass {
-    /// ELFCLASSNONE
-    ///
-    /// Invalid class.
-    #[default]
-    None = 0,
+impl_enum_try_from! {
+    #[repr(u8)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum ElfClass {
+        /// ELFCLASSNONE
+        ///
+        /// Invalid class.
+        #[default]
+        None = 0,
 
-    /// ELFCLASS32
-    ///
-    /// 32-bit objects.
-    Class32 = 1,
+        /// ELFCLASS32
+        ///
+        /// 32-bit objects.
+        Class32 = 1,
 
-    /// ELFCLASS64
-    ///
-    /// 64-bit objects.
-    Class64 = 2,
+        /// ELFCLASS64
+        ///
+        /// 64-bit objects.
+        Class64 = 2,
+    },
+    u8,
+    String,
+    "invalid ELF class".into()
 }
 
-#[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Encoding {
-    /// ELFCLASSNONE
-    ///
-    /// Invalid class.
-    #[default]
-    None = 0,
+impl_enum_try_from! {
+    #[repr(u8)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum Encoding {
+        /// ELFCLASSNONE
+        ///
+        /// Invalid class.
+        #[default]
+        None = 0,
 
-    /// ELFDATA2LSB
-    ///
-    /// Specifies 2's complement values, with the least significant byte occupying the lowest
-    /// address.
-    LSB2 = 1,
+        /// ELFDATA2LSB
+        ///
+        /// Specifies 2's complement values, with the least significant byte occupying the lowest
+        /// address.
+        LSB2 = 1,
 
-    /// ELFDATA2MSB
-    ///
-    /// Specifies 2's complement values, with the most significant byte occupying the lowest
-    /// address.
-    MSB2 = 2,
+        /// ELFDATA2MSB
+        ///
+        /// Specifies 2's complement values, with the most significant byte occupying the lowest
+        /// address.
+        MSB2 = 2,
+    },
+    u8,
+    String,
+    "invaild encoding".into()
 }
 
-#[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ElfVersion {
-    /// Invalid version.
-    None = 0,
+impl_enum_try_from! {
+    #[repr(u8)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum ElfVersion {
+        /// Invalid version.
+        None = 0,
 
-    /// Current version.
-    #[default]
-    Current = 1,
+        /// Current version.
+        #[default]
+        Current = 1,
+    },
+    u8,
+    String,
+    "not supported ELF version".into()
 }
 
-#[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum OsAbi {
-    /// ELFOSABI_SYSV
-    ///
-    /// System V ABI.
-    #[default]
-    SysV = 0,
+impl_enum_try_from! {
+    #[repr(u8)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum OsAbi {
+        /// ELFOSABI_SYSV
+        ///
+        /// System V ABI.
+        #[default]
+        SysV = 0,
 
-    /// ELFOSABI_HPUX
-    ///
-    /// HP-UX operating system.
-    HpUx = 1,
+        /// ELFOSABI_HPUX
+        ///
+        /// HP-UX operating system.
+        HpUx = 1,
 
-    /// ELFOSABI_STANDALONE
-    ///
-    /// Standalone (embedded) application.
-    Standalone = 255,
+        /// ELFOSABI_STANDALONE
+        ///
+        /// Standalone (embedded) application.
+        Standalone = 255,
+    },
+    u8,
+    String,
+    "not supported OS or ABI".into()
 }
 
-#[repr(u16)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ObjectFileType {
-    /// ET_NONE
-    ///
-    /// No file type.
-    #[default]
-    None = 0,
+impl_enum_try_from! {
+    #[repr(u16)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum ObjectFileType {
+        /// ET_NONE
+        ///
+        /// No file type.
+        #[default]
+        None = 0,
 
-    /// ET_REL
-    ///
-    /// Relocatable file.
-    Rel = 1,
+        /// ET_REL
+        ///
+        /// Relocatable file.
+        Rel = 1,
 
-    /// ET_EXEC
-    ///
-    /// Executable file.
-    Exec = 2,
+        /// ET_EXEC
+        ///
+        /// Executable file.
+        Exec = 2,
 
-    /// ET_DYN
-    ///
-    /// Shared object file.
-    Dyn = 3,
+        /// ET_DYN
+        ///
+        /// Shared object file.
+        Dyn = 3,
 
-    /// ET_CORE
-    ///
-    /// Core file.
-    Core = 4,
+        /// ET_CORE
+        ///
+        /// Core file.
+        Core = 4,
+    },
+    u16,
+    String,
+    "invalid object file type".into()
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(u16)]
-pub enum Machine {
-    /// EM_NONE
-    ///
-    /// No macnihe.
-    #[default]
-    None = 0,
+impl_enum_try_from! {
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+    #[repr(u16)]
+    pub enum Machine {
+        /// EM_NONE
+        ///
+        /// No macnihe.
+        #[default]
+        None = 0,
 
-    /// EM_M32
-    ///
-    /// AT&T WE 32100
-    M32 = 1,
+        /// EM_M32
+        ///
+        /// AT&T WE 32100
+        M32 = 1,
 
-    /// EM_SPARC
-    ///
-    /// SPARC.
-    Sparc = 2,
+        /// EM_SPARC
+        ///
+        /// SPARC.
+        Sparc = 2,
 
-    /// EM_386
-    ///
-    /// Intel 80386.
-    I386 = 3,
+        /// EM_386
+        ///
+        /// Intel 80386.
+        I386 = 3,
 
-    /// EM_68K
-    ///
-    /// Motorola 68000.
-    Motorola68K = 4,
+        /// EM_68K
+        ///
+        /// Motorola 68000.
+        Motorola68K = 4,
 
-    /// EM_88K
-    ///
-    /// Motorola 88000
-    Motorola88K = 5,
+        /// EM_88K
+        ///
+        /// Motorola 88000
+        Motorola88K = 5,
 
-    /// EM_860
-    ///
-    /// Intel 80860
-    I860 = 7,
+        /// EM_860
+        ///
+        /// Intel 80860
+        I860 = 7,
 
-    /// EM_MIPS
-    ///
-    /// MIPS RS3000
-    Mips = 8,
+        /// EM_MIPS
+        ///
+        /// MIPS RS3000
+        Mips = 8,
+    },
+    u16,
+    String,
+    "invalid machine".into()
 }
 
 pub struct Elf64SectionHeader {
@@ -325,72 +396,77 @@ pub struct Elf64SectionHeader {
     pub entsize: u64,
 }
 
-#[repr(u32)]
-pub enum SectionType {
-    ///
-    /// Marks the section header as inactive; it does not have an associated section. Other members
-    /// of the section header have undefined values.
-    Null = 0,
+impl_enum_try_from! {
+    #[repr(u32)]
+    pub enum SectionType {
+        ///
+        /// Marks the section header as inactive; it does not have an associated section. Other members
+        /// of the section header have undefined values.
+        Null = 0,
 
-    /// SHT_PROGBITS
-    ///
-    /// The section holds information defined by the program, whose format and meaning are
-    /// determined solely by the program.
-    Progbits = 1,
+        /// SHT_PROGBITS
+        ///
+        /// The section holds information defined by the program, whose format and meaning are
+        /// determined solely by the program.
+        Progbits = 1,
 
-    /// SHT_SYMTAB
-    ///
-    /// The section holds a symbol table.
-    Symtab = 2,
+        /// SHT_SYMTAB
+        ///
+        /// The section holds a symbol table.
+        Symtab = 2,
 
-    /// SHT_STRTAB
-    ///
-    /// The section holds a string table.
-    Strtab = 3,
+        /// SHT_STRTAB
+        ///
+        /// The section holds a string table.
+        Strtab = 3,
 
-    /// SHT_RELA
-    ///
-    /// The section holds relocation entries with explicit addends, such as type `Elf32_Rela` for
-    /// the 32-bit class of object files.
-    Rela = 4,
+        /// SHT_RELA
+        ///
+        /// The section holds relocation entries with explicit addends, such as type `Elf32_Rela` for
+        /// the 32-bit class of object files.
+        Rela = 4,
 
-    /// SHT_HASH
-    ///
-    /// The section holds a symbol hash table.
-    Hash = 5,
+        /// SHT_HASH
+        ///
+        /// The section holds a symbol hash table.
+        Hash = 5,
 
-    /// SHT_DYNAMIC
-    ///
-    /// The section holds information for dynamic linking.
-    Dynamic = 6,
+        /// SHT_DYNAMIC
+        ///
+        /// The section holds information for dynamic linking.
+        Dynamic = 6,
 
-    /// SHT_NOTE
-    ///
-    /// The section holds information that marks the file in some way.
-    Note = 7,
+        /// SHT_NOTE
+        ///
+        /// The section holds information that marks the file in some way.
+        Note = 7,
 
-    /// SHT_NOBITS
-    ///
-    /// A section of this type ocuupies no space in the file but otherwise resembles
-    /// `SHT_PROGBITS`. Although this section contains no bytes, the sh_offset member contains the
-    /// conceptual file offset.
-    Nobits = 8,
+        /// SHT_NOBITS
+        ///
+        /// A section of this type ocuupies no space in the file but otherwise resembles
+        /// `SHT_PROGBITS`. Although this section contains no bytes, the sh_offset member contains the
+        /// conceptual file offset.
+        Nobits = 8,
 
-    /// SHT_REL
-    ///
-    /// The section holds relocation entries without explicit addends, such as type `Elf32_Rel` for
-    /// the 32-bit class of object files. An object file may have multiple relocation sections.
-    Rel = 9,
+        /// SHT_REL
+        ///
+        /// The section holds relocation entries without explicit addends, such as type `Elf32_Rel` for
+        /// the 32-bit class of object files. An object file may have multiple relocation sections.
+        Rel = 9,
 
-    /// SHT_SHLIB
-    ///
-    /// This section type is reserved but has unspecified semantics.
-    Shlib = 10,
+        /// SHT_SHLIB
+        ///
+        /// This section type is reserved but has unspecified semantics.
+        Shlib = 10,
 
-    /// SHT_DYNSYM
-    ///
-    /// Holds a symbol table.
-    Dynsym = 11,
+        /// SHT_DYNSYM
+        ///
+        /// Holds a symbol table.
+        Dynsym = 11,
+    },
+    u32,
+    String,
+    "invalid section type".into()
 }
 
 bitflags! {
@@ -430,15 +506,20 @@ pub struct Elf64ProgramHeader {
     pub align: u64,
 }
 
-#[repr(u32)]
-pub enum SegmentType {
-    Null = 0,
-    Load = 1,
-    Dynamic = 2,
-    Interp = 3,
-    Note = 4,
-    Shlib = 5,
-    Phdr = 6,
+impl_enum_try_from! {
+    #[repr(u32)]
+    pub enum SegmentType {
+        Null = 0,
+        Load = 1,
+        Dynamic = 2,
+        Interp = 3,
+        Note = 4,
+        Shlib = 5,
+        Phdr = 6,
+    },
+    u32,
+    String,
+    "invalid segment type".into()
 }
 
 bitflags! {
