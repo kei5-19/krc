@@ -627,6 +627,7 @@ bitflags! {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Elf64ProgramHeader {
     pub ty: SegmentType,
     pub flags: SegmentFlag,
@@ -640,6 +641,7 @@ pub struct Elf64ProgramHeader {
 
 impl_enum_try_from! {
     #[repr(u32)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum SegmentType {
         Null = 0,
         Load = 1,
@@ -648,6 +650,12 @@ impl_enum_try_from! {
         Note = 4,
         Shlib = 5,
         Phdr = 6,
+        Tls = 7,
+        Num = 8,
+        GnuEhFrame = 0x6474_E550,
+        GnuStack = 0x6474_E551,
+        GnuRelro = 0x6474_E552,
+        GnuProperty = 0x6474_E553,
     },
     u32,
     String,
@@ -655,6 +663,7 @@ impl_enum_try_from! {
 }
 
 bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct SegmentFlag: u32 {
         const X = 0x1;
         const W = 0x2;
