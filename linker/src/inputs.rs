@@ -80,18 +80,34 @@ impl ObjectFile {
     }
 
     pub fn section_headers(&self) -> SectionHeaderIter {
-        SectionHeaderIter {
-            head: &self.data[self.header.shoff as usize - mem::size_of_val(&self.header)..],
-            len: self.header.shnum,
-            pos: 0,
+        if self.header.shoff != 0 {
+            SectionHeaderIter {
+                head: &self.data[self.header.shoff as usize - mem::size_of_val(&self.header)..],
+                len: self.header.shnum,
+                pos: 0,
+            }
+        } else {
+            SectionHeaderIter {
+                head: &self.data,
+                len: 0,
+                pos: 0,
+            }
         }
     }
 
     pub fn program_headers(&self) -> ProgramHeaderIter {
-        ProgramHeaderIter {
-            head: &self.data[self.header.phoff as usize - mem::size_of_val(&self.header)..],
-            len: self.header.phnum,
-            pos: 0,
+        if self.header.phoff != 0 {
+            ProgramHeaderIter {
+                head: &self.data[self.header.phoff as usize - mem::size_of_val(&self.header)..],
+                len: self.header.phnum,
+                pos: 0,
+            }
+        } else {
+            ProgramHeaderIter {
+                head: &self.data,
+                len: 0,
+                pos: 0,
+            }
         }
     }
 }
